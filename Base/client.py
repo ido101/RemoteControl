@@ -33,7 +33,7 @@ class ClientControlled:
             self.client_socket.connect((self.host, self.port_control))
             self.is_keyboard = True
         except Exception as e:
-            print(f"Couldnt connect to keyboard")
+            print(f"Couldnt connect to keyboard: {e}")
         
     def create_screen_client(self):
         self.client_screen = socket.socket() # Create TCP socket
@@ -41,7 +41,7 @@ class ClientControlled:
             self.client_screen.connect((self.host, self.port_screen))
             self.is_screen = True
         except Exception as e:
-            print(f"Couldnt connect to screen")
+            print(f"Couldnt connect to screen: {e}")
 
     def wrap_client(self):
         context = ssl.create_default_context()
@@ -132,31 +132,34 @@ class ClientControlled:
                 print("Client Disconnected")
 
     def run(self):
-        self.create_client()
-        print("Client Connected")
+        try:
+            self.create_client()
+            print("Client Connected")
 
-        file = self.client_socket.makefile('r', buffering=1)
-        choice = file.readline().strip()
-        print(f"Configuration received from server: {choice}")
+            file = self.client_socket.makefile('r', buffering=1)
+            choice = file.readline().strip()
+            print(f"Configuration received from server: {choice}")
 
-        
-
-        threads = []
-        if "1" in choice or "2" in choice:
-            self.wrap_client()
-            thread_key = threading.Thread(target=self.send_keys)
-            thread_key.start()
-            threads.append(thread_key)
             
-        if "3" in choice:
-            self.create_screen_client()
-            self.wrap_screen_client()
-            thread_screen = threading.Thread(target=self.send_screen)
-            thread_screen.start()
-            threads.append(thread_screen)
 
-        for thread in threads:
-            thread.join()
+            threads = []
+            if "1" in choice or "2" in choice:
+                self.wrap_client()
+                thread_key = threading.Thread(target=self.send_keys)
+                thread_key.start()
+                threads.append(thread_key)
+                
+            if "3" in choice:
+                self.create_screen_client()
+                self.wrap_screen_client()
+                thread_screen = threading.Thread(target=self.send_screen)
+                thread_screen.start()
+                threads.append(thread_screen)
+
+            for thread in threads:
+                thread.join()
+        except Exception as e:
+            print(f"Error during client loop: {e}")
         
 
 
