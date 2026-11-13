@@ -248,6 +248,7 @@ class RemoteServer:
 
     def run(self):
         print("--------------Remote Control--------------")
+        exiting = False
         while True:
             try:
                 self.create_server()
@@ -258,9 +259,17 @@ class RemoteServer:
                 print(f"Control established with {client_address}")
                 
                 
-                choice = input("Do you want control over keyboard(1), mouse(2), or screen(3)? Type all the options you want: ")
+                choice = input("Do you want control over keyboard(1), mouse(2), or screen(3)?\n(To let go of this connection - l, to quit - q)\nType all the options you want: ").strip().lower()
 
                 self.client_socket.sendall(choice.encode() + b'\n')
+
+                if "q" in choice:
+                    exiting = True
+                    exit()
+
+                if "l" in choice:
+                    self.close_sockets()
+                    continue
 
                 threads = []
                 if "1" in choice:
@@ -287,7 +296,10 @@ class RemoteServer:
                 print(f"Error in server loop: {e}")
             finally:
                 self.close_sockets()
-                print("Restarting server for next connection...\n")
+                if not exiting:
+                    print("Restarting server for next connection...\n")
+                else:
+                    print("Exiting...")
         
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

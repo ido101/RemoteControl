@@ -12,7 +12,7 @@ from pynput.mouse import Controller as MouseController, Button
 
 DEFAULT_CONTROL_PORT = 8080
 DEFAULT_SCREEN_PORT = 8081
-DEFAULT_SLEEP = 0.3 # Lower for a smoother screen sharing
+DEFAULT_SLEEP = 0.1 # Lower for more FPS
 
 class ClientControlled:
     def __init__(self, host, port_control=DEFAULT_CONTROL_PORT, port_screen=DEFAULT_SCREEN_PORT, sleep_time=DEFAULT_SLEEP):
@@ -42,8 +42,18 @@ class ClientControlled:
     def wrap_client(self):
         context = ssl.create_default_context()
         try:
+            # For Testing that we know is safe, disable hostname and certificate verification:
+            # context.check_hostname = False
+            # context.verify_mode = ssl.CERT_NONE
+            # self.client_socket = context.wrap_socket(self.client_socket)
+
+            # However, for Real World and SSL security its necessary to keep verification enabled
+
+            # If the client has the certificate like now, we can load it to make sure it passes(client must have it!)
+            # In order to make sure our self generated certificate in the project is verified we load it:
             context.load_verify_locations(cafile="server.crt")
 
+            # The server hostname must match Common Name(CN) in the certificate file
             self.client_socket = context.wrap_socket(self.client_socket, server_hostname="Ido")
         except Exception as e:
             print(f"SSL Error: {e}")
@@ -138,6 +148,14 @@ class ClientControlled:
             file = self.client_socket.makefile('r', buffering=1)
             choice = file.readline().strip()
             print(f"Configuration received from server: {choice}")
+
+            if "l" in choice:
+                print("Controller device refused control")
+                quit()
+
+            if "q" in choice:
+                print("Controller device exited")
+                quit()
 
             threads = []
             if "1" in choice or "2" in choice:
