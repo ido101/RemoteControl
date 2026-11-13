@@ -24,14 +24,11 @@ class ClientControlled:
         self.mouse = MouseController()
         self.client_socket = None
         self.client_screen = None
-        self.is_keyboard = False
-        self.is_screen = False
 
     def create_client(self):
         self.client_socket = socket.socket() # Create raw TCP socket
         try:
             self.client_socket.connect((self.host, self.port_control))
-            self.is_keyboard = True
         except Exception as e:
             print(f"Couldnt connect to keyboard: {e}")
         
@@ -39,7 +36,6 @@ class ClientControlled:
         self.client_screen = socket.socket() # Create TCP socket
         try:
             self.client_screen.connect((self.host, self.port_screen))
-            self.is_screen = True
         except Exception as e:
             print(f"Couldnt connect to screen: {e}")
 
@@ -58,78 +54,76 @@ class ClientControlled:
         self.client_screen = context.wrap_socket(self.client_screen)
 
     def send_screen(self):
-        if self.is_screen:
-            try:
-                while True:
-                    screenshot = pyautogui.screenshot()
-            
-                    # Encode the frame:
-                    frame_buffer = io.BytesIO()
-                    screenshot.save(frame_buffer, format="JPEG", quality=70)
-                    frame_data = frame_buffer.getvalue()
-            
-                    # Sends the size of the frame:
-                    frame_size = len(frame_data)
-                    self.client_screen.sendall(struct.pack('>L', frame_size))    
-            
-                    # Send the frame
-                    self.client_screen.sendall(frame_data)
-            
-                    time.sleep(self.sleep_time) # For a quicker screenshot rate lower this number
-            except Exception as e:
-                print(f"Error while sending screenshot: {e}")
-            finally:
-                if self.client_screen:
-                    self.client_screen.close()
+        try:
+            while True:
+                screenshot = pyautogui.screenshot()
+        
+                # Encode the frame:
+                frame_buffer = io.BytesIO()
+                screenshot.save(frame_buffer, format="JPEG", quality=70)
+                frame_data = frame_buffer.getvalue()
+        
+                # Sends the size of the frame:
+                frame_size = len(frame_data)
+                self.client_screen.sendall(struct.pack('>L', frame_size))    
+        
+                # Send the frame
+                self.client_screen.sendall(frame_data)
+        
+                time.sleep(self.sleep_time) # For a quicker screenshot rate lower this number
+        except Exception as e:
+            print(f"Error while sending screenshot: {e}")
+        finally:
+            if self.client_screen:
+                self.client_screen.close()
 
     def send_keys(self):
-        if self.is_keyboard:
-            try:
-                file = self.client_socket.makefile('r', buffering=1)
-                for line in file:
-                    line = line.strip()
-                    if not line:
-                        continue
+        try:
+            file = self.client_socket.makefile('r', buffering=1)
+            for line in file:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                info = line.split("|")
+                action = info[0]
+
+                if action == "click":
+                    btn_name = info[1]
+                    pressed = info[2] == "True"
                     
-                    info = line.split("|")
-                    action = info[0]
+                    # Map string to pynput Button
+                    btn = getattr(Button, btn_name, Button.left)
+                    if pressed:
+                        self.mouse.press(btn)
+                    else:
+                        self.mouse.release(btn)
 
-                    if action == "click":
-                        btn_name = info[1]
-                        pressed = info[2] == "True"
-                        
-                        # Map string to pynput Button
-                        btn = getattr(Button, btn_name, Button.left)
-                        if pressed:
-                            self.mouse.press(btn)
-                        else:
-                            self.mouse.release(btn)
+                elif action == "scroll":
+                    self.mouse.scroll(int(info[1]), int(info[2]))
 
-                    elif action == "scroll":
-                        self.mouse.scroll(int(info[1]), int(info[2]))
+                elif action == "move":
+                    self.mouse.position = (int(info[1]), int(info[2]))
 
-                    elif action == "move":
-                        self.mouse.position = (int(info[1]), int(info[2]))
+                elif action == "key":
+                    key_name = info[1]
+                    self.keyboard.press(key_name)
+                    self.keyboard.release(key_name)
+                    print(f"clicked: {key_name}")
 
-                    elif action == "key":
-                        key_name = info[1]
-                        self.keyboard.press(key_name)
-                        self.keyboard.release(key_name)
-                        print(f"clicked: {key_name}")
-
-                    elif action == "special_key":
-                        key_name = info[1]
-                        if hasattr(Key, key_name):
-                            key = getattr(Key, key_name)
-                            self.keyboard.press(key)
-                            self.keyboard.release(key)
-                            print(f"clicked: {str(key)[4:]}")
-            except Exception as e:
-                print(f"Connection Lost: {e}")
-            finally:
-                if self.client_socket:
-                    self.client_socket.close()
-                print("Client Disconnected")
+                elif action == "special_key":
+                    key_name = info[1]
+                    if hasattr(Key, key_name):
+                        key = getattr(Key, key_name)
+                        self.keyboard.press(key)
+                        self.keyboard.release(key)
+                        print(f"clicked: {str(key)[4:]}")
+        except Exception as e:
+            print(f"Connection Lost: {e}")
+        finally:
+            if self.client_socket:
+                self.client_socket.close()
+            print("Client Disconnected")
 
     def run(self):
         try:
