@@ -254,14 +254,13 @@ class RemoteServer:
                 print(f"Listening for new devices to control...")
 
                 client_address = self.accept_client()
+                self.wrap_client_ssl()
                 print(f"Control established with {client_address}")
                 
                 
                 choice = input("Do you want control over keyboard(1), mouse(2), or screen(3)? Type all the options you want: ")
 
                 self.client_socket.sendall(choice.encode() + b'\n')
-
-                self.wrap_client_ssl()
 
                 threads = []
                 if "1" in choice:

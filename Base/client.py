@@ -134,6 +134,7 @@ class ClientControlled:
     def run(self):
         try:
             self.create_client()
+            self.wrap_client()
             print("Client Connected")
 
             file = self.client_socket.makefile('r', buffering=1)
@@ -144,7 +145,6 @@ class ClientControlled:
 
             threads = []
             if "1" in choice or "2" in choice:
-                self.wrap_client()
                 thread_key = threading.Thread(target=self.send_keys)
                 thread_key.start()
                 threads.append(thread_key)
