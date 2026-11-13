@@ -41,17 +41,21 @@ class ClientControlled:
 
     def wrap_client(self):
         context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+        try:
+            context.load_verify_locations(cafile="server.crt")
 
-        self.client_socket = context.wrap_socket(self.client_socket)
+            self.client_socket = context.wrap_socket(self.client_socket, server_hostname="Ido")
+        except Exception as e:
+            print(f"SSL Error: {e}")
 
     def wrap_screen_client(self):
         context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+        try:
+            context.load_verify_locations(cafile="server.crt")
 
-        self.client_screen = context.wrap_socket(self.client_screen)
+            self.client_screen = context.wrap_socket(self.client_screen, server_hostname="Ido")
+        except Exception as e:
+            print(f"SSL Error: {e}")
 
     def send_screen(self):
         try:
@@ -135,8 +139,6 @@ class ClientControlled:
             choice = file.readline().strip()
             print(f"Configuration received from server: {choice}")
 
-            
-
             threads = []
             if "1" in choice or "2" in choice:
                 thread_key = threading.Thread(target=self.send_keys)
@@ -154,8 +156,6 @@ class ClientControlled:
                 thread.join()
         except Exception as e:
             print(f"Error during client loop: {e}")
-        
-
 
 if __name__ == "__main__":
     os.chdir(Path(__file__).resolve().parent) # Change directory to where the file is
