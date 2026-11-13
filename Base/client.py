@@ -81,7 +81,7 @@ class ClientControlled:
             if self.client_screen:
                 self.client_screen.close()
 
-    def send_keys(self):
+    def get_keys(self):
         try:
             file = self.client_socket.makefile('r', buffering=1)
             for line in file:
@@ -110,7 +110,7 @@ class ClientControlled:
                     self.mouse.position = (int(info[1]), int(info[2]))
 
                 elif action == "key":
-                    key_name = info[1]
+                    key_name = line.split("|", 1)[1]
                     self.keyboard.press(key_name)
                     self.keyboard.release(key_name)
                     print(f"clicked: {key_name}")
@@ -141,7 +141,7 @@ class ClientControlled:
 
             threads = []
             if "1" in choice or "2" in choice:
-                thread_key = threading.Thread(target=self.send_keys)
+                thread_key = threading.Thread(target=self.get_keys)
                 thread_key.start()
                 threads.append(thread_key)
                 
