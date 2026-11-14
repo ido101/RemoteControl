@@ -44,6 +44,11 @@ class RemoteServer:
         t_monitor.start()
         return t_monitor
 
+    def stop_listeners(self):
+        if self.input_control.keyboard_listener:
+            self.input_control.keyboard_listener.stop()
+        if self.input_control.mouse_listener:
+            self.input_control.mouse_listener.stop()
 
     def connection_monitor(self):
         try:
@@ -57,10 +62,7 @@ class RemoteServer:
         print("\nClient disconnected!")
         
         # Stop listeners so join() unblocks immediately
-        if self.input_control.keyboard_listener:
-            self.input_control.keyboard_listener.stop()
-        if self.input_control.mouse_listener:
-            self.input_control.mouse_listener.stop()
+        self.stop_listeners()
     
     def run(self):
         print("--------------Remote Control--------------")
