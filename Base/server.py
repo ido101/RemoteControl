@@ -210,7 +210,7 @@ class InputController:
                     print(f"sent: {key.name}")
             except (ConnectionResetError, BrokenPipeError, OSError):
                 print("[!] Client disconnected during keyboard event.")
-                self.client_socket.close()
+                client_socket.close()
                 return False
             except Exception as e:
                 print(f"Keyboard error: {e}")

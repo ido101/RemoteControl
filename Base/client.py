@@ -16,84 +16,55 @@ DEFAULT_SLEEP = 0.1 # Lower for more FPS
 
 class ClientControlled:
     def __init__(self, host, port_control=DEFAULT_CONTROL_PORT, port_screen=DEFAULT_SCREEN_PORT, sleep_time=DEFAULT_SLEEP):
-        self.host = host
-        self.port_control = port_control
-        self.port_screen = port_screen
-        self.sleep_time = sleep_time
+        self.net_manager = NetworkManager(host, port_control, port_screen)
+        self.input_exe = InputExecute()
+        self.screen_sender = ScreenSender(sleep_time)
+
+    def run(self):
+        try:
+            self.net_manager.create_client()
+            self.net_manager.wrap_client()
+            print("Client Connected")
+
+            file = self.net_manager.client_socket.makefile('r', buffering=1)
+            choice = file.readline().strip()
+            file.close()
+            print(f"Configuration received from server: {choice}")
+
+            if "l" in choice:
+                print("Controller device refused control")
+                quit()
+
+            if "q" in choice:
+                print("Controller device exited")
+                quit()
+
+            threads = []
+            if "1" in choice or "2" in choice:
+                thread_key = threading.Thread(target=self.input_exe.get_keys, args=(self.net_manager.client_socket,))
+                thread_key.start()
+                threads.append(thread_key)
+                
+            if "3" in choice:
+                self.net_manager.create_screen_client()
+                self.net_manager.wrap_screen_client()
+                thread_screen = threading.Thread(target=self.screen_sender.send_screen, args=(self.net_manager.client_screen,))
+                thread_screen.start()
+                threads.append(thread_screen)
+
+            for thread in threads:
+                thread.join()
+        except Exception as e:
+            print(f"Error during client loop: {e}")
+
+class InputExecute:
+    def __init__(self):
         self.keyboard = KeyboardController()
         self.mouse = MouseController()
-        self.client_socket = None
-        self.client_screen = None
 
-    def create_client(self):
-        self.client_socket = socket.socket() # Create raw TCP socket
+    def get_keys(self, client_socket):
         try:
-            self.client_socket.connect((self.host, self.port_control))
-        except Exception as e:
-            print(f"Couldnt connect to keyboard: {e}")
-        
-    def create_screen_client(self):
-        self.client_screen = socket.socket() # Create TCP socket
-        try:
-            self.client_screen.connect((self.host, self.port_screen))
-        except Exception as e:
-            print(f"Couldnt connect to screen: {e}")
-
-    def wrap_client(self):
-        context = ssl.create_default_context()
-        try:
-            # For Testing that we know is safe, disable hostname and certificate verification:
-            # context.check_hostname = False
-            # context.verify_mode = ssl.CERT_NONE
-            # self.client_socket = context.wrap_socket(self.client_socket)
-
-            # However, for Real World and SSL security its necessary to keep verification enabled
-
-            # If the client has the certificate like now, we can load it to make sure it passes(client must have it!)
-            # In order to make sure our self generated certificate in the project is verified we load it:
-            context.load_verify_locations(cafile="server.crt")
-
-            # The server hostname must match Common Name(CN) in the certificate file
-            self.client_socket = context.wrap_socket(self.client_socket, server_hostname="Ido")
-        except Exception as e:
-            print(f"SSL Error: {e}")
-
-    def wrap_screen_client(self):
-        context = ssl.create_default_context()
-        try:
-            context.load_verify_locations(cafile="server.crt")
-
-            self.client_screen = context.wrap_socket(self.client_screen, server_hostname="Ido")
-        except Exception as e:
-            print(f"SSL Error: {e}")
-
-    def send_screen(self):
-        try:
-            while True:
-                screenshot = pyautogui.screenshot()
-        
-                # Encode the frame:
-                frame_buffer = io.BytesIO()
-                screenshot.save(frame_buffer, format="JPEG", quality=70)
-                frame_data = frame_buffer.getvalue()
-        
-                # Sends the size of the frame:
-                frame_size = len(frame_data)
-                self.client_screen.sendall(struct.pack('>L', frame_size))    
-        
-                # Send the frame
-                self.client_screen.sendall(frame_data)
-        
-                time.sleep(self.sleep_time) # For a quicker screenshot rate lower this number
-        except Exception as e:
-            print(f"Error while sending screenshot: {e}")
-        finally:
-            if self.client_screen:
-                self.client_screen.close()
-
-    def get_keys(self):
-        try:
-            file = self.client_socket.makefile('r', buffering=1)
+            file = client_socket.makefile('r', buffering=1)
             for line in file:
                 line = line.strip()
                 if not line:
@@ -135,45 +106,87 @@ class ClientControlled:
         except Exception as e:
             print(f"Connection Lost: {e}")
         finally:
-            if self.client_socket:
-                self.client_socket.close()
+            if client_socket:
+                client_socket.close()
             print("Client Disconnected")
 
-    def run(self):
+class ScreenSender:
+    def __init__(self, sleep_time):
+        self.sleep_time = sleep_time
+
+    def send_screen(self, client_screen):
         try:
-            self.create_client()
-            self.wrap_client()
-            print("Client Connected")
-
-            file = self.client_socket.makefile('r', buffering=1)
-            choice = file.readline().strip()
-            print(f"Configuration received from server: {choice}")
-
-            if "l" in choice:
-                print("Controller device refused control")
-                quit()
-
-            if "q" in choice:
-                print("Controller device exited")
-                quit()
-
-            threads = []
-            if "1" in choice or "2" in choice:
-                thread_key = threading.Thread(target=self.get_keys)
-                thread_key.start()
-                threads.append(thread_key)
-                
-            if "3" in choice:
-                self.create_screen_client()
-                self.wrap_screen_client()
-                thread_screen = threading.Thread(target=self.send_screen)
-                thread_screen.start()
-                threads.append(thread_screen)
-
-            for thread in threads:
-                thread.join()
+            while True:
+                screenshot = pyautogui.screenshot()
+        
+                # Encode the frame:
+                frame_buffer = io.BytesIO()
+                screenshot.save(frame_buffer, format="JPEG", quality=70)
+                frame_data = frame_buffer.getvalue()
+        
+                # Sends the size of the frame:
+                frame_size = len(frame_data)
+                client_screen.sendall(struct.pack('>L', frame_size))    
+        
+                # Send the frame
+                client_screen.sendall(frame_data)
+        
+                time.sleep(self.sleep_time) # For a quicker screenshot rate lower this number
         except Exception as e:
-            print(f"Error during client loop: {e}")
+            print(f"Error while sending screenshot: {e}")
+        finally:
+            if client_screen:
+                client_screen.close()
+
+class NetworkManager:
+    def __init__(self, host, port_control, port_screen):
+        self.host = host
+        self.port_control = port_control
+        self.port_screen = port_screen
+        self.client_socket = None
+        self.client_screen = None
+
+    def create_client(self):
+        self.client_socket = socket.socket() # Create raw TCP socket
+        try:
+            self.client_socket.connect((self.host, self.port_control))
+        except Exception as e:
+            print(f"Couldnt connect to keyboard: {e}")
+            
+    def create_screen_client(self):
+        self.client_screen = socket.socket() # Create TCP socket
+        try:
+            self.client_screen.connect((self.host, self.port_screen))
+        except Exception as e:
+            print(f"Couldnt connect to screen: {e}")
+
+    def wrap_client(self):
+        context = ssl.create_default_context()
+        try:
+            # For Testing that we know is safe, disable hostname and certificate verification:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            self.client_socket = context.wrap_socket(self.client_socket)
+
+            # However, for Real World and SSL security its necessary to keep verification enabled
+
+            # If the client has the certificate like now, we can load it to make sure it passes(client must have it!)
+            # In order to make sure our self generated certificate in the project is verified we load it:
+            # context.load_verify_locations(cafile="server.crt")
+
+            # The server hostname must match Common Name(CN) in the certificate file
+            # self.client_socket = context.wrap_socket(self.client_socket, server_hostname="Ido")
+        except Exception as e:
+            print(f"SSL Error: {e}")
+
+    def wrap_screen_client(self):
+        context = ssl.create_default_context()
+        try:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            self.client_screen = context.wrap_socket(self.client_screen)
+        except Exception as e:
+            print(f"SSL Error: {e}")
 
 if __name__ == "__main__":
     os.chdir(Path(__file__).resolve().parent) # Change directory to where the file is
