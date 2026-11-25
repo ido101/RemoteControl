@@ -1,4 +1,5 @@
 import socket
+import sys
 import pyautogui
 import struct
 import time
@@ -17,7 +18,7 @@ DEFAULT_SLEEP = 0.1 # Lower for more FPS
 class ClientControlled:
     def __init__(self, host, port_control=DEFAULT_CONTROL_PORT, port_screen=DEFAULT_SCREEN_PORT, sleep_time=DEFAULT_SLEEP):
         self.net_manager = NetworkManager(host, port_control, port_screen)
-        self.input_exe = InputExecute()
+        self.input_rec = InputReceiver()
         self.screen_sender = ScreenSender(sleep_time)
 
     def run(self):
@@ -33,31 +34,34 @@ class ClientControlled:
 
             if "l" in choice:
                 print("Controller device refused control")
-                quit()
+                sys.exit(0)
 
             if "q" in choice:
                 print("Controller device exited")
-                quit()
+                sys.exit(0)
 
             threads = []
             if "1" in choice or "2" in choice:
-                thread_key = threading.Thread(target=self.input_exe.get_keys, args=(self.net_manager.client_socket,))
+                thread_key = threading.Thread(target=self.input_rec.get_keys, args=(self.net_manager.client_socket,))
                 thread_key.start()
                 threads.append(thread_key)
                 
             if "3" in choice:
                 self.net_manager.create_screen_client()
-                self.net_manager.wrap_screen_client()
-                thread_screen = threading.Thread(target=self.screen_sender.send_screen, args=(self.net_manager.client_screen,))
-                thread_screen.start()
-                threads.append(thread_screen)
+                if self.net_manager.client_screen:
+                    self.net_manager.wrap_screen_client()
+                    thread_screen = threading.Thread(target=self.screen_sender.send_screen, args=(self.net_manager.client_screen,))
+                    thread_screen.start()
+                    threads.append(thread_screen)
 
             for thread in threads:
                 thread.join()
         except Exception as e:
             print(f"Error during client loop: {e}")
+        finally:
+            self.net_manager.close_all()
 
-class InputExecute:
+class InputReceiver:
     def __init__(self):
         self.keyboard = KeyboardController()
         self.mouse = MouseController()
@@ -119,10 +123,10 @@ class ScreenSender:
             while True:
                 screenshot = pyautogui.screenshot()
         
-                # Encode the frame:
+                # Save screenshot as a Bytes variable:
                 frame_buffer = io.BytesIO()
                 screenshot.save(frame_buffer, format="JPEG", quality=70)
-                frame_data = frame_buffer.getvalue()
+                frame_data = frame_buffer.getvalue() # Get the entire binary content
         
                 # Sends the size of the frame:
                 frame_size = len(frame_data)
@@ -147,20 +151,30 @@ class NetworkManager:
         self.client_screen = None
 
     def create_client(self):
-        self.client_socket = socket.socket() # Create raw TCP socket
+        sock = socket.socket() # Create raw TCP socket
         try:
-            self.client_socket.connect((self.host, self.port_control))
+            sock.connect((self.host, self.port_control))
+            self.client_socket = sock
         except Exception as e:
             print(f"Couldnt connect to keyboard: {e}")
+            sock.close()
+            self.client_socket = None
+            raise
             
     def create_screen_client(self):
-        self.client_screen = socket.socket() # Create TCP socket
+        sock = socket.socket() # Create TCP socket
         try:
-            self.client_screen.connect((self.host, self.port_screen))
+            sock.connect((self.host, self.port_screen))
+            self.client_screen = sock
         except Exception as e:
             print(f"Couldnt connect to screen: {e}")
+            sock.close()
+            self.client_screen = None
 
     def wrap_client(self):
+        if not self.client_socket:
+            raise RuntimeError("Socket is empty!")
+        
         context = ssl.create_default_context()
         try:
             # For Testing that we know is safe, disable hostname and certificate verification:
@@ -178,6 +192,9 @@ class NetworkManager:
             # self.client_socket = context.wrap_socket(self.client_socket, server_hostname="Ido")
         except Exception as e:
             print(f"SSL Error: {e}")
+            self.client_socket.close()
+            self.client_socket = None
+            raise
 
     def wrap_screen_client(self):
         context = ssl.create_default_context()
@@ -187,6 +204,16 @@ class NetworkManager:
             self.client_screen = context.wrap_socket(self.client_screen)
         except Exception as e:
             print(f"SSL Error: {e}")
+            self.client_screen.close()
+            self.client_screen = None
+
+    def close_all(self):
+        if self.client_socket:
+            self.client_socket.close()
+            self.client_socket = None
+        if self.client_screen:
+            self.client_screen.close()
+            self.client_screen = None
 
 if __name__ == "__main__":
     os.chdir(Path(__file__).resolve().parent) # Change directory to where the file is

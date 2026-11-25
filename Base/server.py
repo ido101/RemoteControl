@@ -1,5 +1,6 @@
 import msvcrt
 import socket
+import sys
 import threading
 import time
 import struct
@@ -20,7 +21,7 @@ CHUNK_SIZE = 1024
 
 class RemoteServer:
     def __init__(self, host, port_control=DEFAULT_CONTROL_PORT, port_screen=DEFAULT_SCREEN_PORT, mouse_interval=DEFAULT_MOUSE_INTERVAL, chunk_size=CHUNK_SIZE):
-        self.input_control = InputController(mouse_interval)
+        self.input_control = InputSender(mouse_interval)
         self.net_manager = NetworkManager(host, port_control, port_screen)
         self.screen_stream = ScreenStreamer(chunk_size)
 
@@ -84,7 +85,7 @@ class RemoteServer:
 
                 if "q" in choice:
                     exiting = True
-                    exit()
+                    sys.exit(0)
 
                 if "l" in choice:
                     self.net_manager.close_sockets()
@@ -192,7 +193,7 @@ class NetworkManager:
                 pass
             self.server_screen_socket = None
 
-class InputController:
+class InputSender:
     def __init__(self, mouse_interval=DEFAULT_MOUSE_INTERVAL):
         self.mouse_interval = mouse_interval
         self.keyboard_listener = None
@@ -317,7 +318,6 @@ class ScreenStreamer:
             print("Screen Thread Error [!]")
         finally:
             cv2.destroyAllWindows()
-
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
